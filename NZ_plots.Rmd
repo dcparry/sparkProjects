@@ -1,0 +1,412 @@
+---
+title: "Scalable NZ temperature plots"
+output: html_notebook
+---
+
+*Plot time series for TMIN and TMAX together for each station (15 total) in New Zealand using Python,
+R, or any other programming language or data visualization tool that you know well.*
+
+
+```{r}
+# load libraries
+library(tidyverse)
+library(lubridate)
+library(gridExtra)
+```
+
+```{r}
+# custom theme
+theme_420 <- function(base_size = 16) {
+  theme_minimal(base_size = base_size) %+replace%
+    theme(
+      plot.title = element_text(size = rel(1.2), face = "bold", margin = margin(0,0,5,0), hjust = 0.5),
+      panel.grid.minor = element_blank(),
+      panel.border = element_blank(),
+      axis.title = element_text(size = rel(1), face = "bold"),
+      axis.text = element_text(size = rel(0.8)),
+      axis.line = element_line(color = "black"),
+      legend.title = element_text(size = rel(1), face = "bold"),
+      legend.text = element_text(size = rel(0.8), face = "bold"),
+      legend.key = element_rect(fill = "transparent", colour = NA),
+      legend.key.size = unit(1.5, "lines"),
+      legend.background = element_rect(fill = "transparent", colour = NA)
+    )
+}
+
+theme_set(theme_420())
+```
+
+```{r}
+NZ_daily <- read.csv(gzfile("daily_NZ.csv\\part-00000-0a6ad803-e70a-460d-a576-5f98f4952cf8-c000.csv.gz"))
+```
+
+```{r}
+# check data types
+str(NZ_daily)
+```
+
+```{r}
+# change data types
+NZ_daily$station_id <- as.factor(NZ_daily$station_id)
+NZ_daily$name <- as.factor(NZ_daily$name)
+NZ_daily$element <- as.factor(NZ_daily$element)
+NZ_daily$date <- as.Date(NZ_daily$date)
+
+# convert from tenths of a degree to whole degrees
+NZ_daily <- NZ_daily %>% 
+  mutate(value = value / 10)
+```
+
+```{r}
+# recheck
+str(NZ_daily)
+```
+
+```{r}
+# find station names
+unique(NZ_daily$name)
+
+# create dataframes for each station
+gisborne <- NZ_daily %>% 
+  filter(name == "GISBORNE AERODROME")
+paraparaumu <- NZ_daily %>% 
+  filter(name == "PARAPARAUMU AWS")
+invercargill <- NZ_daily %>% 
+  filter(name == "INVERCARGILL AIRPOR")
+new_plymouth <- NZ_daily %>% 
+  filter(name == "NEW PLYMOUTH AWS")
+hokitika <- NZ_daily %>% 
+  filter(name == "HOKITIKA AERODROME")
+wellington <- NZ_daily %>% 
+  filter(name == "WELLINGTON AERO AWS")
+auckland <- NZ_daily %>% 
+  filter(name == "AUCKLAND AERO AWS")
+kaikoura <- NZ_daily %>% 
+  filter(name == "KAIKOURA")
+raoul_kermadec <- NZ_daily %>% 
+  filter(name == "RAOUL ISL/KERMADEC")
+christchurch <- NZ_daily %>% 
+  filter(name == "CHRISTCHURCH INTL")
+campbell <- NZ_daily %>% 
+  filter(name == "CAMPBELL ISLAND AWS")
+enderby <- NZ_daily %>% 
+  filter(name == "ENDERBY ISLAND AWS")
+kaitaia <- NZ_daily %>% 
+  filter(name == "KAITAIA")
+tara <- NZ_daily %>% 
+  filter(name == "TARA HILLS")
+chathams <- NZ_daily %>% 
+  filter(name == "CHATHAM ISLANDS AWS")
+```
+
+```{r, fig.width=16,fig.height=4}
+# test plot with gisborne data
+
+gisborne_plot <- ggplot(gisborne, aes(x = date, y = value, color = element, group = element)) +
+  geom_line()+  
+  labs(title = "TMIN and TMAX over Time", x = "Date", y = "Temperature (degrees celcius)", color = "") +
+  theme_420() 
+
+gisborne_plot
+```
+
+```{r}
+# average by month
+gisborne_agg <- gisborne %>% 
+  mutate(month = floor_date(date, "month")) %>%  # extract month from date
+  group_by(month, element) %>%  # group by month and element
+  summarise(avg_value = mean(value, na.rm = TRUE)) %>%  # calculate the average
+  ungroup() %>%
+  tidyr::complete(month = seq(min(month), max(month), by = "month"), element) # add dates so no gaps
+```
+```{r, fig.width=16,fig.height=4}
+# new plot with monthly average
+gisborne_plot2 <- ggplot(gisborne_agg, aes(month, avg_value, color = element)) +
+  geom_line(linewidth = 1)+  
+  labs(title = "Gisborne", x = "Date", y = "Temperature (deg celcius)", color = "") +
+  theme_420() 
+
+gisborne_plot2
+```
+
+```{r, fig.width=16,fig.height=4}
+
+# function to calculate averages for each station and creat plot
+create_temperature_plot <- function(df, location, theme_style) {
+  df_agg <- df %>%
+    mutate(month = floor_date(date, "month")) %>% 
+    group_by(month, element) %>%
+    summarise(avg_value = mean(value, na.rm = TRUE)) %>%
+    ungroup() %>%
+    tidyr::complete(  
+      month = seq(min(month), max(month), by = "month"),
+      element 
+    )
+  
+  # Create the ggplot
+  plot <- ggplot(df_agg, aes(month, avg_value, color = element, group = element)) +
+    geom_line(size = 1) +
+    geom_point() +
+    labs(title = location, x = "Date", y = "Temperature (°C)", color = "") +
+    theme_style + 
+    ylim(-10, 30) +
+    scale_x_date(
+      limits = c(start_date, end_date), 
+      date_breaks = "5 year",
+      date_labels = "%Y")
+  
+  return(plot) 
+}
+
+start_date <- as.Date("1940-03-08")
+end_date <- as.Date("2024-03-15")
+
+
+hokitika_plot <- create_temperature_plot(hokitika, "Hokitika Aerodrome", theme_420())
+auckland_plot <- create_temperature_plot(auckland, "Auckland Aero AWS", theme_420())
+campbell_plot <- create_temperature_plot(campbell, "Campbell Island AWS", theme_420())
+chathams_plot <- create_temperature_plot(chathams, "Chatham Islands AWS", theme_420())
+christchurch_plot <- create_temperature_plot(christchurch, "Christchurch INTL", theme_420())
+enderby_plot <- create_temperature_plot(enderby, "Enderby Island AWS", theme_420())
+gisborne_plot <- create_temperature_plot(gisborne, "Gisborne Aerodrome", theme_420())
+invercargill_plot <- create_temperature_plot(invercargill, "Invercargill Airport", theme_420())
+kaikoura_plot <- create_temperature_plot(kaikoura, "Kaikoura", theme_420())
+kaitaia_plot <- create_temperature_plot(kaitaia, "Kaitaia", theme_420())
+new_plymouth_plot <- create_temperature_plot(new_plymouth, "New Plymouth AWS", theme_420())
+paraparaumu_plot <- create_temperature_plot(paraparaumu, "Paraparaumu AWS", theme_420())
+raoul_kermadec_plot <- create_temperature_plot(raoul_kermadec, "Raoul Isl/Kermadec", theme_420())
+tara_plot <- create_temperature_plot(tara, "Tara Hills", theme_420())
+wellington_plot <- create_temperature_plot(wellington, "Wellington Aero AWS", theme_420())
+
+# Display the plots
+
+auckland_plot
+# campbell_plot
+# chathams_plot
+# christchurch_plot
+# enderby_plot
+# gisborne_plot
+# hokitika_plot
+# invercargill_plot
+# kaikoura_plot
+# kaitaia_plot
+# new_plymouth_plot
+# paraparaumu_plot
+# raoul_kermadec_plot
+# tara_plot
+# wellington_plot
+
+```
+
+```{r, fig.width=16,fig.height=50}
+# ploit all 15 stations together
+NZ_plots <- grid.arrange(auckland_plot, campbell_plot, chathams_plot, christchurch_plot, enderby_plot, gisborne_plot, hokitika_plot, invercargill_plot, kaikoura_plot, kaitaia_plot, new_plymouth_plot, paraparaumu_plot, raoul_kermadec_plot, tara_plot, wellington_plot, nrow = 15)
+```
+
+```{r, fig.width=16,fig.height=4}
+# do the same but average for year instead of month
+
+# Function to create a plot for a given dataframe and location name
+create_temperature_plot <- function(df, location_name, theme_style) {
+  df_agg <- df %>%
+    mutate(year = floor_date(date, "year")) %>% 
+    group_by(year, element) %>%
+    summarise(avg_value = mean(value, na.rm = TRUE)) %>%
+    ungroup() %>%
+    tidyr::complete(  
+      year = seq(min(year), max(year), by = "year"),  
+      element  
+    )
+  
+  # Create the ggplot
+  plot <- ggplot(df_agg, aes(year, avg_value, color = element, group = element)) +
+    geom_line(size = 1) +
+    geom_point() +
+    labs(title = location_name, x = "Date", y = "Temperature (°C)", color = "") +
+    theme_style + 
+    ylim(0, 25) +
+    scale_x_date(
+      limits = c(start_date, end_date),  
+      date_breaks = "5 year", 
+      date_labels = "%Y")
+  
+  return(plot)  # Return the ggplot
+}
+
+start_date <- as.Date("1940-01-01")
+end_date <- as.Date("2023-01-01")
+
+hokitika_plot2 <- create_temperature_plot(hokitika, "Hokitika Aerodrome", theme_420())
+auckland_plot2 <- create_temperature_plot(auckland, "Auckland Aero AWS", theme_420())
+campbell_plot2 <- create_temperature_plot(campbell, "Campbell Island AWS", theme_420())
+chathams_plot2 <- create_temperature_plot(chathams, "Chatham Islands AWS", theme_420())
+christchurch_plot2 <- create_temperature_plot(christchurch, "Christchurch INTL", theme_420())
+enderby_plot2 <- create_temperature_plot(enderby, "Enderby Island AWS", theme_420())
+gisborne_plot2 <- create_temperature_plot(gisborne, "Gisborne Aerodrome", theme_420())
+invercargill_plot2 <- create_temperature_plot(invercargill, "Invercargill Airport", theme_420())
+kaikoura_plot2 <- create_temperature_plot(kaikoura, "Kaikoura", theme_420())
+kaitaia_plot2 <- create_temperature_plot(kaitaia, "Kaitaia", theme_420())
+new_plymouth_plot2 <- create_temperature_plot(new_plymouth, "New Plymouth AWS", theme_420())
+paraparaumu_plot2 <- create_temperature_plot(paraparaumu, "Paraparaumu AWS", theme_420())
+raoul_kermadec_plot2 <- create_temperature_plot(raoul_kermadec, "Raoul Isl/Kermadec", theme_420())
+tara_plot2 <- create_temperature_plot(tara, "Tara Hills", theme_420())
+wellington_plot2 <- create_temperature_plot(wellington, "Wellington Aero AWS", theme_420())
+
+# auckland_plot2
+# campbell_plot2
+# chathams_plot2
+# christchurch_plot2
+# enderby_plot2
+# gisborne_plot2
+ hokitika_plot2
+# invercargill_plot2
+# kaikoura_plot2
+# kaitaia_plot2
+# new_plymouth_plot2
+# paraparaumu_plot2
+# raoul_kermadec_plot2
+# tara_plot2
+# wellington_plot2
+
+```
+
+```{r, fig.width=16,fig.height=50}
+# plot all 15 together
+NZ_plots <- grid.arrange(auckland_plot2, campbell_plot2, chathams_plot2, christchurch_plot2, enderby_plot2, gisborne_plot2, hokitika_plot2, invercargill_plot2, kaikoura_plot2, kaitaia_plot2, new_plymouth_plot2, paraparaumu_plot2, raoul_kermadec_plot2, tara_plot2, wellington_plot2, nrow = 15)
+```
+
+```{r, fig.width=16,fig.height=6}
+# plot all stations on one plot (TMAX)
+df_agg <- NZ_daily %>%
+    mutate(year = floor_date(date, "year")) %>%  
+    filter(element == "TMAX") %>% 
+    group_by(year, name) %>%
+    summarise(avg_value = mean(value, na.rm = TRUE)) %>%
+    ungroup() 
+
+
+df_agg <- df_agg %>%
+    tidyr::complete(  
+      year = seq(min(year), max(year), by = "year"),
+      name 
+    )
+  
+start_date <- as.Date("1940-01-01")
+end_date <- as.Date("2023-01-01")
+
+
+plot <- ggplot(df_agg, aes(year, avg_value, color = name)) +
+    geom_line(size = 1) +
+    labs(title = "TMAX", x = "Date", y = "Temperature (°C)", color = "") +
+    theme_420() + 
+    ylim(5, 25) +
+    scale_x_date(
+      limits = c(start_date, end_date),  
+      date_breaks = "5 year", 
+      date_labels = "%Y")
+
+
+plot
+
+```
+
+```{r, fig.width=16,fig.height=6}
+# plot all stations on one plot (TMIN)
+df_agg2 <- NZ_daily %>%
+    mutate(year = floor_date(date, "year")) %>%
+    filter(element == "TMIN") %>% 
+    group_by(year, name) %>%
+    summarise(avg_value = mean(value, na.rm = TRUE)) %>%
+    ungroup() 
+
+
+df_agg2 <- df_agg2 %>%
+    tidyr::complete(  
+      year = seq(min(year), max(year), by = "year"),
+      name 
+    )
+  
+
+start_date <- as.Date("1940-01-01")
+end_date <- as.Date("2023-01-01")
+
+plot2 <- ggplot(df_agg2, aes(year, avg_value, color = name)) +
+    geom_line(size = 1) +
+    labs(title = "TMIN", x = "Date", y = "Temperature (°C)", color = "") +
+    theme_420() + 
+    ylim(0, 20) +
+    scale_x_date(
+      limits = c(start_date, end_date),  
+      date_breaks = "5 year", 
+      date_labels = "%Y")
+
+
+plot2
+
+```
+
+Also, plot the average time series for TMIN and TMAX together for the entire country.
+
+```{r}
+# average TMIN and TMAX for whole country (monthly)
+nz_agg <- NZ_daily %>%
+    mutate(month = floor_date(date, "month")) %>%  
+    group_by(month, element) %>%
+    summarise(avg_value = mean(value, na.rm = TRUE)) %>%
+    ungroup() %>%
+    tidyr::complete( 
+      month = seq(min(month), max(month), by = "month"), 
+      element 
+    )
+```
+
+```{r, fig.width=16,fig.height=4}
+# plot whole country averages (monthly)
+
+start_date <- as.Date("1940-03-01")
+end_date <- as.Date("2024-03-01")
+
+nz_plot1 <- ggplot(nz_agg, aes(month, avg_value, color = element)) +
+  geom_line(size = 1)+  
+  labs(title = "NZ Monthly Average", x = "Date", y = "Temperature (°C)", color = "") +
+  theme_420() +
+  scale_x_date(
+    limits = c(start_date, end_date),  # Set the desired x-axis range
+    date_breaks = "10 year",  # Customize date breaks
+    date_labels = "%Y")
+
+nz_plot1
+```
+
+```{r}
+# yearly average
+nz_agg_yr <- NZ_daily %>%
+    mutate(year = floor_date(date, "year")) %>% 
+    group_by(year, element) %>%
+    summarise(avg_value = mean(value, na.rm = TRUE)) %>%
+    ungroup() %>%
+    tidyr::complete( 
+      year = seq(min(year), max(year), by = "year"),  
+      element
+    )
+```
+
+```{r, fig.width=16,fig.height=4}
+# plot yearly averages
+
+start_date <- as.Date("1940-01-01")
+end_date <- as.Date("2023-01-01")
+
+nz_plot2 <- ggplot(nz_agg_yr, aes(year, avg_value, color = element)) +
+  geom_line(size = 1)+  
+  labs(title = "NZ Yearly Average", x = "Date", y = "Temperature (°C)", color = "") +
+  theme_420() +
+  scale_x_date(
+    limits = c(start_date, end_date),  # Set the desired x-axis range
+    date_breaks = "10 year",  # Customize date breaks
+    date_labels = "%Y")
+
+nz_plot2
+```
+
+
