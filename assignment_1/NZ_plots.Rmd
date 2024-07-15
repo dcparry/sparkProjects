@@ -199,8 +199,11 @@ auckland_plot
 ```
 
 ```{r, fig.width=16,fig.height=50}
-# ploit all 15 stations together
-NZ_plots <- grid.arrange(auckland_plot, campbell_plot, chathams_plot, christchurch_plot, enderby_plot, gisborne_plot, hokitika_plot, invercargill_plot, kaikoura_plot, kaitaia_plot, new_plymouth_plot, paraparaumu_plot, raoul_kermadec_plot, tara_plot, wellington_plot, nrow = 15)
+# plot all 15 stations together
+NZ_plots <- grid.arrange(auckland_plot, campbell_plot, chathams_plot, christchurch_plot, enderby_plot, 
+                         gisborne_plot, hokitika_plot, invercargill_plot, kaikoura_plot, kaitaia_plot, 
+                         new_plymouth_plot, paraparaumu_plot, raoul_kermadec_plot, tara_plot, 
+                         wellington_plot, nrow = 15)
 ```
 
 ```{r, fig.width=16,fig.height=4}
