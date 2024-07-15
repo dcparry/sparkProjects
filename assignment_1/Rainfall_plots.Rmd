@@ -1,0 +1,235 @@
+---
+title: "Scalable rainfall plot"
+output: html_notebook
+author: Dianne Parry
+---
+
+Find an elegant way to plot the average rainfall in 2023 for each country. There are many
+ways that you could do this, such as using a choropleth to color a map based on average
+rainfall. Are there any gaps or missing values in your plot?
+
+```{r}
+# import libraries
+library(tidyverse)
+library(lubridate)
+library(plotly)
+library(RColorBrewer)
+library(gridExtra)
+```
+
+
+```{r}
+# custom shiny theme for plots
+theme_420 <- function(base_size = 16) {
+  theme_minimal(base_size = base_size) %+replace%
+    theme(
+      plot.title = element_text(size = rel(1.2), face = "bold", margin = margin(0,0,5,0), hjust = 0.5),
+      panel.grid.minor = element_blank(),
+      panel.border = element_blank(),
+      axis.title = element_text(size = rel(1), face = "bold"),
+      axis.text = element_text(size = rel(0.8)),
+      axis.line = element_line(color = "black"),
+      legend.title = element_text(size = rel(1), face = "bold"),
+      legend.text = element_text(size = rel(0.8), face = "bold"),
+      legend.key = element_rect(fill = "transparent", colour = NA),
+      legend.key.size = unit(1.5, "lines"),
+      legend.background = element_rect(fill = "transparent", colour = NA)
+    )
+}
+
+theme_set(theme_420())
+```
+
+
+```{r}
+# import files
+rainfall <- read.csv(gzfile("precip.csv\\part-00000-d5af8127-d195-4fc1-9b5c-c44b2d7613ff-c000.csv.gz"))
+codes2 <- read.csv("Countrycodes.csv")
+```
+
+
+```{r}
+# convert from tenths of mm to whole mm
+rainfall <- rainfall %>% 
+  mutate(avg_rain = average_rainfall / 10)
+```
+
+
+```{r}
+# for later investigation
+dr <- rainfall %>% 
+  filter(country_name == "Dominican Republic")
+
+eg <- rainfall %>% 
+  filter(country_name == "Equatorial Guinea")
+
+laos <- rainfall %>% 
+  filter(country_name == "Laos")
+
+# for later investigation
+belize <- rainfall %>% 
+  filter(country_name == "Belize")
+
+sudan <- rainfall %>% 
+  filter(country_name == "Sudan")
+
+```
+
+
+```{r}
+# filter rainfall data to 2023 only
+rainfall_2023 <- rainfall %>% 
+  filter(year == "2023") %>% 
+  select(-average_rainfall, -year)
+
+# change name of appropriate code for joining to rainfall data
+names(codes2)[names(codes2) == 'FIPS_GEC'] <- 'country_code'
+```
+
+
+```{r}
+# join rainfall data to country code data, selecting only columns required to plot
+rain <- rainfall_2023 %>% 
+  inner_join(codes2, by = "country_code") %>% 
+  select(country_name, avg_rain, ISO_3166_3)
+```
+
+
+```{r}
+# to check all countries have been included 
+anti_join(rainfall_2023, rain, by = "country_name")
+```
+
+
+```{r}
+# code from https://plotly.com/r/choropleth-maps/ "World Choropleth Map"
+
+# adjust the top margin to allow room for the title
+margins <- list(t = 80, b = 40) 
+
+fig <- plot_geo(rain) %>% 
+  add_trace(
+    z = ~avg_rain, 
+    color = ~avg_rain, 
+    colors = 'Blues',
+    text = ~country_name, 
+    locations = ~ISO_3166_3) %>% 
+  colorbar(title = 'Rainfall (mm)') %>% 
+  layout(
+    title = '2023 Global Average Rainfall',
+    margin = margins)
+
+fig
+```
+
+
+```{r}
+# why is Sudan average so high?
+
+sudan$year <- as.integer(sudan$year)
+
+sudan <- sudan %>%
+    tidyr::complete(  
+      year = seq(min(year), 2023, by = 1)
+        # Keep 'element' group
+    )
+
+ggplot(sudan, aes(x = year, y = average_rainfall)) +
+  geom_line(linewidth =1 , color = "steelblue") + 
+  geom_point(size = 1) +
+  labs(title = "Sudan Average Rainfall", x = "Year", y = "Rainfall (mm)") +
+  theme_420() +
+  scale_x_continuous(
+    breaks = seq(min(sudan$year), max(sudan$year), by = 8)  # Break every 5 years
+  )
+```
+
+
+```{r}
+eg$year <- as.integer(eg$year)
+
+eg <- eg %>%
+    tidyr::complete(  
+      year = seq(min(year), 2023, by = 1)
+    )
+
+
+eg_plot <- ggplot(eg, aes(x = year, y = avg_rain)) +
+  geom_line(linewidth =1 , color = "steelblue") + 
+  geom_point(size = 1) +
+  labs(title = "Equatorial Guinea", x = "Year", y = "Rainfall (mm)") +
+  theme_420() +
+  scale_x_continuous(
+    breaks = seq(min(eg$year), max(eg$year), by = 8)  
+  )
+
+eg_plot
+```
+
+
+```{r}
+belize$year <- as.integer(belize$year)
+
+belize <- belize %>%
+    tidyr::complete(  
+      year = seq(min(year), 2023, by = 1)
+    )
+
+
+belize_plot <- ggplot(belize, aes(x = year, y = average_rainfall)) +
+  geom_line(linewidth =1 , color = "steelblue") + 
+  geom_point(size = 1) +
+  labs(title = "Belize", x = "Year", y = "Rainfall (mm)") +
+  theme_420() +
+  scale_x_continuous(
+    breaks = seq(min(belize$year), max(belize$year), by = 10) 
+  )
+
+belize_plot
+```
+
+
+```{r}
+dr$year <- as.integer(dr$year)
+
+dr <- dr %>%
+    tidyr::complete(  
+      year = seq(min(year), 2023, by = 1)
+    )
+
+dr_plot <- ggplot(dr, aes(x = year, y = average_rainfall)) +
+  geom_line(linewidth =1 , color = "steelblue") + 
+  geom_point(size = 1) +
+  labs(title = "Dominican Republic", x = "Year", y = "Rainfall (mm)") +
+  theme_420()  +
+  scale_x_continuous(
+    breaks = seq(min(dr$year), max(dr$year), by = 10)  
+  )
+
+dr_plot
+```
+
+
+```{r}
+laos$year <- as.integer(laos$year)
+
+laos <- laos %>%
+    tidyr::complete(  
+      year = seq(min(year), 2023, by = 1)
+        # Keep 'element' group
+    )
+
+laos_plot <- ggplot(laos, aes(x = year, y = average_rainfall)) +
+  geom_line(linewidth =1 , color = "steelblue") + 
+  geom_point(size = 1) +
+  labs(title = "Laos", x = "Year", y = "Rainfall (mm)") +
+  theme_420()  +
+  scale_x_continuous(
+    breaks = seq(min(laos$year), max(2023), by = 10) 
+  )
+
+laos_plot
+```
+
+
+
